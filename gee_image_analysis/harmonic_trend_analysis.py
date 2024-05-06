@@ -1,11 +1,13 @@
+import os
+import time
+
 import ee
 
-gee_project_name = "ee-mkurzenkovotd14"
-aoi_name = "projects/ee-mkurzenkovotd14/assets/granica_np_narochanski"
-CLOUD_PROB_THRESHOLD = 60
+from config_utils import config
 
-ee.Initialize(project=gee_project_name)
-aoi = ee.FeatureCollection(aoi_name)
+ee.Initialize(project=config.gee_project_name)
+aoi = ee.FeatureCollection(config.aoi_name)
+CLOUD_PROB_THRESHOLD = config.cloud_threshold
 
 
 def filter_bounds_date(img_col):
@@ -85,3 +87,28 @@ def compute_harmonic_trend_coefficients():
     )
 
     return harmonic_trend_coefficients
+
+
+def export_to_drive(filename, loc_name, max_pixels=1e8):
+    """Экспортирует изображение в Google Drive."""
+    basename = os.path.splitext(filename)[0]
+    image = compute_harmonic_trend_coefficients()
+    export_task = ee.batch.Export.image.toDrive(
+        image=image,
+        description=basename,
+        scale=10,
+        region=aoi.geometry(),
+        fileNamePrefix=basename,
+        crs="EPSG:32635",
+        fileFormat="GeoTIFF",
+        folder=f"{loc_name}",
+        maxPixels=max_pixels,
+    )
+    export_task.start()
+    waiting = True
+    while waiting:
+        if export_task.status()["state"] in ["COMPLETED", "FAILED"]:
+            waiting = False
+        else:
+            time.sleep(5)
+    return 0
